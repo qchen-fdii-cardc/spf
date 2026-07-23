@@ -1,3 +1,13 @@
+//! Core friction and hydraulic utility functions.
+//! This crate also exposes a C ABI for FFI integrations.
+
+/// Computes Darcy friction factor `lambda` from Reynolds number `re`.
+///
+/// Piecewise model:
+/// - `re < 2000`: laminar flow, `lambda = 64 / re`
+/// - `2000 <= re <= 4000`: cubic interpolation through tabulated transition points
+/// - `4000 < re < 100000`: Blasius correlation
+/// - `re >= 100000`: empirical smooth-pipe correlation
 pub fn lambda(re: f64) -> f64 {
     if re < 2000.0 {
         return 64.0 / re;
@@ -15,17 +25,28 @@ pub fn lambda(re: f64) -> f64 {
     }
 }
 
+/// Computes hydraulic diameter for a rectangular duct.
+///
+/// Formula: `D_h = 2ab / (a + b)`.
+/// `a` and `b` are side lengths.
 pub fn hydraulic_diameter(a: f64, b: f64) -> f64 {
     return 2.0 * a * b / (a + b);
 }
 
+/// Computes rectangular correction factor `k_p`.
+///
+/// Uses piecewise cubic fits based on aspect ratio `ba = b0 / a0`:
+/// - laminar branch for `re < 2000`
+/// - turbulent branch for `re >= 2000`
 pub fn kp_rect(re: f64, a0: f64, b0: f64) -> f64 {
     let ba = b0 / a0;
-    let k = if re < 2000.0 {// laminar flow
+    let k = if re < 2000.0 {
+        // laminar flow
         // Exact cubic interpolation through:
         // 0, 1.50; 0.2, 1.34; 0.2, 1.20; 0.4, 1.02; 0.6, 0.94; 0.8, 0.90; 1.0, 0.89
         -0.61 * ba.powi(3) + 1.22 * ba.powi(2) - 0.61 * ba + 1.50
-    } else { // turbulent flow
+    } else {
+        // turbulent flow
         // Exact cubic interpolation through:
         // 0, 1.10; 0.2, 1.08; 0.2, 1.06; 0.4, 1.04; 0.6, 1.02; 0.8, 1.01; 1.0, 1.0
         -0.10 * ba.powi(3) + 0.30 * ba.powi(2) - 0.20 * ba + 1.10
@@ -33,16 +54,19 @@ pub fn kp_rect(re: f64, a0: f64, b0: f64) -> f64 {
     return k;
 }
 
+/// C ABI wrapper for [`lambda`].
 #[unsafe(no_mangle)]
 pub extern "C" fn spf_lambda(re: f64) -> f64 {
     lambda(re)
 }
 
+/// C ABI wrapper for [`hydraulic_diameter`].
 #[unsafe(no_mangle)]
 pub extern "C" fn spf_hydraulic_diameter(a: f64, b: f64) -> f64 {
     hydraulic_diameter(a, b)
 }
 
+/// C ABI wrapper for [`kp_rect`].
 #[unsafe(no_mangle)]
 pub extern "C" fn spf_kp_rect(re: f64, a0: f64, b0: f64) -> f64 {
     kp_rect(re, a0, b0)
